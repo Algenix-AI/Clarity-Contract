@@ -1,0 +1,15 @@
+Functions needed for smart contract
+
+1. Create new event (new contract)
+    - event name
+    - event type (political/environmental/financial etc)
+    - event description
+    - for event parameters
+    - against event parameters (converse of for event parameters)
+    - for stakes (amount staked into for event) (currency in stx)
+    - against stakes (amount staked into against event)
+    - number of stakes (for and against separately)
+
+2. Stake event
+    - Decision, for or against
+    - Amount of stx staked
