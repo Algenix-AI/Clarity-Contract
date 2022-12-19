@@ -55,10 +55,12 @@
 (define-public (create-stake (event-id uint) (choice bool) (amount uint))
     (begin
         (asserts! (is-some (map-get? events event-id)) (err 1)) ;; check if event exists
-        (asserts! (and
-            (unwrap-panic (check-time (get deadline (unwrap-panic (map-get? events event-id)))))
-            (unwrap-panic (get is-closed (map-get? events event-id)))
-        ) (err 1)) ;; check if deadline has passed or if event is already closed
+        (asserts! 
+            (and
+                (check-time (get deadline (unwrap-panic (map-get? events event-id))))
+                (get is-closed (unwrap-panic (map-get? events event-id)))
+            ) (err 1)
+        ) ;; check if deadline has passed or if event is already closed
         (begin
             ;; check that the staker is valid person and check that this event has already been staked by user
             ;; (as-contract tx-sender) ;; is tx-sender ok or is as-contract needed here
@@ -94,7 +96,12 @@
     (let ((staker-values (unwrap-panic (map-get? stakes {event-id: event-id, principal-address: tx-sender}))))
         (let ((event-values (unwrap-panic (map-get? events event-id))))
             (begin
-                (asserts! (and (unwrap-panic (check-time (get deadline event-values))) (get is-closed event-values)) (err 1)) ;; check if deadline has passed or if event is already closed
+                (asserts! 
+                    (and
+                        (check-time (get deadline (unwrap-panic (map-get? events event-id))))
+                        (get is-closed (unwrap-panic (map-get? events event-id)))
+                    ) (err u1)
+                ) ;; check if deadline has passed or if event is already closed
                 (asserts! (is-eq result (get choice staker-values)) (err u1)) ;; checks if staker has won the event
                 (asserts! (is-eq false (get paid staker-values)) (err u1)) ;; checks if staker has already been paid
                 (map-set stakes {event-id: event-id, principal-address: tx-sender} (merge staker-values {paid: true})) ;; update staker as paid
