@@ -1,0 +1,16 @@
+Unique thing about smart contract on future events:
+- Time limit
+- Market-determined odds
+
+Trading vs Betting
+
+For betting, if you stake $50, you're prepared to lose everything or win more. Losers pay winners, the third-party is willing to accept some loss if its odds fail.
+For trading, you can buy/sell before the deadline.
+
+For buying smart contracts, you may not earn enough to justify the initial investment. 
+
+We can take the in-between with hedging.
+
+So if you're afraid of losing everything, some third-person offers to step in as an insurer similar to Singapore pools or some bank.
+
+escrow smart contract
