@@ -22,8 +22,7 @@
 
 ;;; Constants
 (define-constant admin 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM) ;; replace this with the deployed wallet value
-(define-data-var last-event-id uint u0)
-(define-data-var principals (list 100 principal) (list))
+(define-data-var last-event-id uint u0) 
 
 ;; Error messages to be defined here
 
@@ -118,12 +117,12 @@
         (err u1)
 ))
 
-;; remove current-timestamp
-;; admin pays out the winners and marks all users as paid
-(define-public (make-payouts (event-id uint) (current-timestamp uint))
-    (let ((staker-values (unwrap-panic (map-get? stakes {event-id: event-id, principal-address: tx-sender}))))
+;; admin pays out a principal and marks the principal as paid
+(define-public (make-payouts (event-id uint) (current-timestamp uint) (current-principal principal))
+    (let ((staker-values (unwrap-panic (map-get? stakes {event-id: event-id, principal-address: current-principal}))))
         (let ((event-values (unwrap-panic (map-get? events event-id))))
             (begin
+                (asserts! (is-some (map-get? stakes {event-id: event-id, principal-address: current-principal})) (err u1))
                 ;; check if deadline has passed or if event is already closed
                 (asserts! (not (is-eq current-timestamp (get deadline event-values))) (err u5))
                 (asserts! (get is-closed (unwrap-panic (map-get? events event-id))) (err u5))
@@ -137,7 +136,7 @@
                         (stx-transfer? ;; tx-sender is the frontend user here; the admin smart contract is paying out
                             (unwrap-panic (calculate-staker-wins (get amount staker-values) (get for-total-amount event-values) (get against-total-amount event-values)))
                             admin
-                            tx-sender
+                            current-principal
                         )
                     ))
                     (try!
@@ -145,7 +144,7 @@
                         (stx-transfer?
                             (unwrap-panic (calculate-staker-wins (get amount staker-values) (get against-total-amount event-values) (get for-total-amount event-values)))
                             admin
-                            tx-sender
+                            current-principal
                         )
                     ))
                 )
@@ -159,7 +158,7 @@
     (begin
         (asserts! (is-eq tx-sender admin) (err u1))
         (close-event event-id result)
-        (make-payouts event-id u2671485312)
+        (ok u0)
 ))
 
 (define-public (print-details)
