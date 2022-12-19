@@ -1,4 +1,4 @@
-Functions needed for smart contract
+Functions needed for main smart contract
 
 1. Create new event (new contract)
     - event name
@@ -13,3 +13,27 @@ Functions needed for smart contract
 2. Stake event
     - Decision, for or against
     - Amount of stx staked
+    - Updates the storage contract
+
+3. Payout fuction
+    - Check the user intiating the Payout
+
+4. Check all of user's stakes
+
+(define-public (create-event
+    (name (string-ascii 100))
+    (description (string-ascii 1000))
+    (type (string-ascii 100))
+    (deadline uint)
+    (for-criteria (string-ascii 100))
+    (against-criteria (string-ascii 100))
+    (for-total-amount uint)
+    (against-total-amount uint)
+    (for-stakers-count uint)
+    (against-stakers-count uint)
+    )
+    ((map-insert events-lib next-event-id (
+        name description type, deadline, for-criteria, 
+        against-criteria, for-total-amount, against-total-amount,
+        for-stakers-count, against-stakers-count
+    ))))
