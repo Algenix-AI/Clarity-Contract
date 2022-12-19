@@ -12,15 +12,18 @@
     against-total-amount: uint,
     for-stakers-count: uint,
     against-stakers-count: uint,
-    is-closed: bool
+    is-closed: bool,
+    result: (optional bool)
 })
 
+;; A user can only make one stake per event
 ;; Hashmap for stakes
 (define-map stakes {event-id: uint, principal-address: principal} {choice: bool, amount: uint, paid: bool})
 
 ;;; Constants
-(define-constant admin 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM) ;; replac this with the deployed wallet value
+(define-constant admin 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM) ;; replace this with the deployed wallet value
 (define-data-var last-event-id uint u0)
+(define-data-var principals (list 100 principal) (list))
 
 ;; Error messages to be defined here
 
@@ -46,34 +49,58 @@
             against-total-amount: u0,
             for-stakers-count: u0,
             against-stakers-count: u0,
-            is-closed: false
+            is-closed: false,
+            result: none
         })
         (ok "Successfully created event")
     )
 )
-
-(define-public (create-stake (event-id uint) (choice bool) (amount uint))
+(define-public (double-down (event-id uint) (choice bool) (amount uint))
     (begin
-        (asserts! (is-some (map-get? events event-id)) (err 1)) ;; check if event exists
-        (asserts! 
-            (and
-                (check-time (get deadline (unwrap-panic (map-get? events event-id))))
-                (get is-closed (unwrap-panic (map-get? events event-id)))
-            ) (err 1)
-        ) ;; check if deadline has passed or if event is already closed
+        (asserts! (not (is-eq none (map-get? stakes {event-id: event-id, principal-address: tx-sender}))) (err u33)) ;;check that user has indeed have had a stake previously
+        (let ((stakes-data (unwrap-panic (map-get? stakes {event-id: event-id, principal-address: tx-sender}))) )
+            (begin
+                (asserts! (is-eq choice (get choice stakes-data)) (err u34))
+                (try! (stx-transfer?
+                    amount
+                    tx-sender
+                    admin
+                ))
+                (merge stakes-data {amount: (+ amount (get amount stakes-data))})
+            )
+        )
+    (ok "Succesfully double-downed"))
+)
+
+(define-public (create-stake (event-id uint) (choice bool) (amount uint) (current-timestamp uint))
+    (begin
+        (asserts! (is-some (map-get? events event-id)) (err u99)) ;; check if event exists
+        (asserts! (not (is-eq current-timestamp (get deadline (unwrap-panic (map-get? events event-id))))) (err u5))
+        (asserts! (not (get is-closed (unwrap-panic (map-get? events event-id)))) (err u101))
+        ;; check if deadline has passed or if event is already closed
         (begin
             ;; check that the staker is valid person and check that this event has already been staked by user
             ;; (as-contract tx-sender) ;; is tx-sender ok or is as-contract needed here
-            (map-insert stakes {event-id: event-id, principal-address: tx-sender} {choice: choice, amount: amount, paid: false})
+            (asserts! (is-eq true (map-insert stakes {event-id: event-id, principal-address: tx-sender} {choice: choice, amount: amount, paid: false})) (err u32))
             (let ((updated-event-values (unwrap-panic (map-get? events event-id))))
                 (if choice
                     (map-set events event-id 
                         (begin
+                            (try! (stx-transfer?
+                                amount
+                                tx-sender
+                                admin
+                            ))
                             (merge (merge updated-event-values { for-stakers-count: (+ u1 (get for-stakers-count updated-event-values))}) { for-total-amount: (+ amount (get for-total-amount updated-event-values))})
                         )
                     )
                     (map-set events event-id
                         (begin
+                            (try! (stx-transfer?
+                                    amount
+                                    tx-sender
+                                    admin
+                            ))
                             (merge (merge updated-event-values { against-stakers-count: (+ u1 (get against-stakers-count updated-event-values))}) { against-total-amount: (+ amount (get against-total-amount updated-event-values))})
                         )
                     )
@@ -84,37 +111,38 @@
     )
 )
 
-;; return event stakes <-- unneeded
+;; return event stakes
 (define-read-only (get-event-info (event-id uint))
     (if (is-some (map-get? events event-id)) ;; check if event exists
         (ok (map-get? events event-id))
         (err u1)
 ))
 
-;; user makes request to get paid if he won
-(define-public (make-payouts (event-id uint) (result bool))
+;; remove current-timestamp
+;; admin pays out the winners and marks all users as paid
+(define-public (make-payouts (event-id uint) (current-timestamp uint))
     (let ((staker-values (unwrap-panic (map-get? stakes {event-id: event-id, principal-address: tx-sender}))))
         (let ((event-values (unwrap-panic (map-get? events event-id))))
             (begin
-                (asserts! 
-                    (and
-                        (check-time (get deadline (unwrap-panic (map-get? events event-id))))
-                        (get is-closed (unwrap-panic (map-get? events event-id)))
-                    ) (err u1)
-                ) ;; check if deadline has passed or if event is already closed
-                (asserts! (is-eq result (get choice staker-values)) (err u1)) ;; checks if staker has won the event
-                (asserts! (is-eq false (get paid staker-values)) (err u1)) ;; checks if staker has already been paid
+                ;; check if deadline has passed or if event is already closed
+                (asserts! (not (is-eq current-timestamp (get deadline event-values))) (err u5))
+                (asserts! (get is-closed (unwrap-panic (map-get? events event-id))) (err u5))
+                (asserts! (is-eq (unwrap-panic (get result (unwrap-panic (map-get? events event-id)))) (get choice staker-values)) (err u6)) ;; checks if staker has won the event
+                (asserts! (is-eq false (get paid staker-values)) (err u7)) ;; checks if staker has already been paid
+                
                 (map-set stakes {event-id: event-id, principal-address: tx-sender} (merge staker-values {paid: true})) ;; update staker as paid
-                (if result ;; if the result was for, then we payout from against-total-amount
-                    (try! (as-contract
+                (if (unwrap-panic (get result (unwrap-panic (map-get? events event-id))));; if the result was for, then we payout from against-total-amount
+                    (try!
+                        (begin 
                         (stx-transfer? ;; tx-sender is the frontend user here; the admin smart contract is paying out
                             (unwrap-panic (calculate-staker-wins (get amount staker-values) (get for-total-amount event-values) (get against-total-amount event-values)))
                             admin
                             tx-sender
                         )
                     ))
-                    (try! (as-contract (
-                        stx-transfer?
+                    (try!
+                        (begin 
+                        (stx-transfer?
                             (unwrap-panic (calculate-staker-wins (get amount staker-values) (get against-total-amount event-values) (get for-total-amount event-values)))
                             admin
                             tx-sender
@@ -127,23 +155,35 @@
     )
 )
 
-(define-public (admin-close-event (event-id uint))
+(define-public (admin-close-event (event-id uint) (result bool))
     (begin
-        (asserts! (not (is-eq tx-sender admin)) (err u1))
-        (close-event event-id)
+        (asserts! (is-eq tx-sender admin) (err u1))
+        (close-event event-id result)
+        (make-payouts event-id u2671485312)
 ))
+
+(define-public (print-details)
+    (begin
+        (print admin)
+        (print tx-sender)
+        (print contract-caller)
+        (ok "!")
+    )
+)
 
 ;;; Internals
 
 ;; Closes event
-(define-private (close-event (event-id uint))
-    (let ((event-values (unwrap-panic (map-get? events event-id))))
-        (merge event-values {is-closed: true})
-        (ok "Successfully closed event")
+(define-private (close-event (event-id uint) (result bool))
+    (begin 
+        (let ((event-values (unwrap-panic (map-get? events event-id)))) 
+        (map-set events event-id (merge (merge event-values {is-closed: true}) {result: (some result)}))
+        )
     )
 )
 
-;;; Checks timestamp of block as a proxy for the current time
+;; unused
+;; Checks timestamp of block as a proxy for the current time
 (define-private (check-time (deadline uint)) 
     (>= (unwrap-panic (get-block-info? time u0)) deadline)
 )
