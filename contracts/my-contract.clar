@@ -163,10 +163,7 @@
 
 (define-public (print-details)
     (begin
-        (print admin)
-        (print tx-sender)
-        (print contract-caller)
-        (ok "!")
+        (ok u1)
     )
 )
 
