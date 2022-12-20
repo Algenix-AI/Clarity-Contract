@@ -74,7 +74,7 @@
 (define-public (create-stake (event-id uint) (choice bool) (amount uint) (current-timestamp uint))
     (begin
         (asserts! (is-some (map-get? events event-id)) (err u99)) ;; check if event exists
-        (asserts! (not (is-eq current-timestamp (get deadline (unwrap-panic (map-get? events event-id))))) (err u5))
+        (asserts! (not (>= current-timestamp (get deadline (unwrap-panic (map-get? events event-id))))) (err u5))
         (asserts! (not (get is-closed (unwrap-panic (map-get? events event-id)))) (err u101))
         ;; check if deadline has passed or if event is already closed
         (begin
@@ -124,16 +124,16 @@
             (begin
                 (asserts! (is-some (map-get? stakes {event-id: event-id, principal-address: current-principal})) (err u1))
                 ;; check if deadline has passed or if event is already closed
-                (asserts! (not (is-eq current-timestamp (get deadline event-values))) (err u5))
+                (asserts! (>= current-timestamp (get deadline event-values)) (err u9))
                 (asserts! (get is-closed (unwrap-panic (map-get? events event-id))) (err u5))
                 (asserts! (is-eq (unwrap-panic (get result (unwrap-panic (map-get? events event-id)))) (get choice staker-values)) (err u6)) ;; checks if staker has won the event
-                (asserts! (is-eq false (get paid staker-values)) (err u7)) ;; checks if staker has already been paid
+                (asserts! (not (get paid staker-values)) (err u7)) ;; checks if staker has already been paid
                 
-                (map-set stakes {event-id: event-id, principal-address: tx-sender} (merge staker-values {paid: true})) ;; update staker as paid
+                (map-set stakes {event-id: event-id, principal-address: current-principal} (merge staker-values {paid: true})) ;; update staker as paid
                 (if (unwrap-panic (get result (unwrap-panic (map-get? events event-id))));; if the result was for, then we payout from against-total-amount
                     (try!
                         (begin 
-                        (stx-transfer? ;; tx-sender is the frontend user here; the admin smart contract is paying out
+                        (stx-transfer?
                             (unwrap-panic (calculate-staker-wins (get amount staker-values) (get for-total-amount event-values) (get against-total-amount event-values)))
                             admin
                             current-principal
@@ -197,5 +197,5 @@
 (define-private (calculate-staker-wins (staker-amount uint) (winning-total-amount uint) (losing-total-amount uint))
     (begin
     (asserts! (>= losing-total-amount u0) (err u1))
-    (ok (* (/ staker-amount winning-total-amount) losing-total-amount)))
+    (ok (+ staker-amount (* (/ staker-amount winning-total-amount) losing-total-amount))))
 )
